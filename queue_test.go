@@ -60,7 +60,7 @@ func TestQueue(t *testing.T) {
 		}
 	}
 	if q.Len() != 0 || q.front != nil || q.back != nil || q.start != 0 {
-		t.Fatalf("empty queue was not reset: %+v", q)
+		t.Fatalf("empty queue was not reset: len=%d front=%p back=%p start=%d", q.Len(), q.front, q.back, q.start)
 	}
 }
 
@@ -72,10 +72,16 @@ func TestQueueClear(t *testing.T) {
 
 	q.Clear()
 	if q.Len() != 0 || q.front != nil || q.back != nil || q.start != 0 {
-		t.Fatalf("Clear() did not reset queue: %+v", q)
+		t.Fatalf("Clear() did not reset queue: len=%d front=%p back=%p start=%d", q.Len(), q.front, q.back, q.start)
 	}
 	if got := slices.Collect(q.All()); len(got) != 0 {
 		t.Fatalf("All() after Clear() = %v, want empty", got)
+	}
+
+	x := 42
+	q.Enqueue(&x)
+	if got := q.Peek(); got != &x {
+		t.Fatalf("Peek() after reusing a pooled segment = %p, want %p", got, &x)
 	}
 }
 

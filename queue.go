@@ -1,7 +1,10 @@
 // Package queue implements a simple queue.
 package queue
 
-import "iter"
+import (
+	"iter"
+	"sync"
+)
 
 type segment[T any] struct {
 	items [16]T
@@ -10,11 +13,13 @@ type segment[T any] struct {
 }
 
 // Queue is a first-in, first-out collection of values.
+// A Queue must not be copied after first use.
 type Queue[T any] struct {
 	front *segment[T]
 	back  *segment[T]
 	start int
 	len   int
+	pool  sync.Pool
 }
 
 // Len returns the number of elements in q.
@@ -25,10 +30,10 @@ func (q *Queue[T]) Len() int {
 // Enqueue adds x to the back of q.
 func (q *Queue[T]) Enqueue(x T) {
 	if q.back == nil {
-		q.back = new(segment[T])
+		q.back = q.getSegment()
 		q.front = q.back
 	} else if q.back.end == len(q.back.items) {
-		q.back.next = new(segment[T])
+		q.back.next = q.getSegment()
 		q.back = q.back.next
 	}
 
@@ -62,8 +67,10 @@ func (q *Queue[T]) Dequeue() T {
 	q.front.items[q.start-1] = zero
 
 	if q.start == q.front.end {
+		empty := q.front
 		q.front = q.front.next
 		q.start = 0
+		q.putSegment(empty)
 		if q.front == nil {
 			q.back = nil
 		}
@@ -88,6 +95,26 @@ func (q *Queue[T]) All() iter.Seq[T] {
 }
 
 // Clear removes all elements from q.
+// It may take time proportional to the number of elements in q.
 func (q *Queue[T]) Clear() {
-	*q = Queue[T]{}
+	for q.front != nil {
+		s := q.front
+		q.front = s.next
+		q.putSegment(s)
+	}
+	q.back = nil
+	q.start = 0
+	q.len = 0
+}
+
+func (q *Queue[T]) getSegment() *segment[T] {
+	if s := q.pool.Get(); s != nil {
+		return s.(*segment[T])
+	}
+	return new(segment[T])
+}
+
+func (q *Queue[T]) putSegment(s *segment[T]) {
+	*s = segment[T]{}
+	q.pool.Put(s)
 }
