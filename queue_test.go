@@ -59,8 +59,16 @@ func TestQueue(t *testing.T) {
 			t.Fatalf("Dequeue() = %d, want %d", got, i)
 		}
 	}
-	if q.Len() != 0 || q.front != nil || q.back != nil || q.start != 0 {
-		t.Fatalf("empty queue was not reset: len=%d front=%p back=%p start=%d", q.Len(), q.front, q.back, q.start)
+	if q.Len() != 0 || q.front == nil || q.back != q.front || q.start != 0 || q.front.end != 0 {
+		t.Fatalf("empty queue was not reset: len=%d front=%p back=%p start=%d end=%d", q.Len(), q.front, q.back, q.start, q.front.end)
+	}
+
+	// Filling the retained segment forces the next segment to come from the pool.
+	for i := range 17 {
+		q.Enqueue(i)
+	}
+	if got := slices.Collect(q.All()); !slices.Equal(got, want[:17]) {
+		t.Fatalf("All() after segment reuse = %v, want %v", got, want[:17])
 	}
 }
 
@@ -69,19 +77,34 @@ func TestQueueClear(t *testing.T) {
 	for i := range 20 {
 		q.Enqueue(&i)
 	}
+	front := q.front
+	spare := front.next
 
 	q.Clear()
-	if q.Len() != 0 || q.front != nil || q.back != nil || q.start != 0 {
-		t.Fatalf("Clear() did not reset queue: len=%d front=%p back=%p start=%d", q.Len(), q.front, q.back, q.start)
+	if q.Len() != 0 || q.front != front || q.back != front || q.start != 0 || q.front.end != 0 {
+		t.Fatalf("Clear() did not reset queue: len=%d front=%p back=%p start=%d end=%d", q.Len(), q.front, q.back, q.start, q.front.end)
+	}
+	if q.front.next != spare {
+		t.Fatal("Clear() did not retain the spare segment")
 	}
 	if got := slices.Collect(q.All()); len(got) != 0 {
 		t.Fatalf("All() after Clear() = %v, want empty", got)
 	}
 
-	x := 42
-	q.Enqueue(&x)
-	if got := q.Peek(); got != &x {
-		t.Fatalf("Peek() after reusing a pooled segment = %p, want %p", got, &x)
+	values := make([]int, 17)
+	for i := range values {
+		q.Enqueue(&values[i])
+	}
+	if q.back != spare {
+		t.Fatal("Enqueue did not reuse the spare segment")
+	}
+	if got := q.Peek(); got != &values[0] {
+		t.Fatalf("Peek() after segment reuse = %p, want %p", got, &values[0])
+	}
+	for i := 1; i < len(spare.items); i++ {
+		if spare.items[i] != nil {
+			t.Fatalf("reused segment item %d was not cleared", i)
+		}
 	}
 }
 

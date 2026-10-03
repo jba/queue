@@ -1,6 +1,10 @@
 // Package queue implements a simple queue.
 package queue
 
+// The queue retains cleared segments for reuse, making Clear constant time.
+// References in retained segments may keep values alive until those segments
+// are reused or the queue itself becomes unreachable.
+
 import (
 	"iter"
 	"sync"
@@ -33,8 +37,11 @@ func (q *Queue[T]) Enqueue(x T) {
 		q.back = q.getSegment()
 		q.front = q.back
 	} else if q.back.end == len(q.back.items) {
-		q.back.next = q.getSegment()
+		if q.back.next == nil {
+			q.back.next = q.getSegment()
+		}
 		q.back = q.back.next
+		q.resetSegment(q.back)
 	}
 
 	q.back.items[q.back.end] = x
@@ -45,7 +52,7 @@ func (q *Queue[T]) Enqueue(x T) {
 // Peek returns the element at the front of q without removing it.
 // It panics if q is empty.
 func (q *Queue[T]) Peek() T {
-	if q.front == nil {
+	if q.len == 0 {
 		panic("queue: peek from empty queue")
 	}
 	return q.front.items[q.start]
@@ -54,7 +61,7 @@ func (q *Queue[T]) Peek() T {
 // Dequeue removes and returns the element at the front of q.
 // It panics if q is empty.
 func (q *Queue[T]) Dequeue() T {
-	if q.front == nil {
+	if q.len == 0 {
 		panic("queue: dequeue from empty queue")
 	}
 
@@ -68,11 +75,12 @@ func (q *Queue[T]) Dequeue() T {
 
 	if q.start == q.front.end {
 		empty := q.front
-		q.front = q.front.next
 		q.start = 0
-		q.putSegment(empty)
-		if q.front == nil {
-			q.back = nil
+		if empty == q.back {
+			q.resetSegment(empty)
+		} else {
+			q.front = empty.next
+			q.putSegment(empty)
 		}
 	}
 
@@ -89,22 +97,25 @@ func (q *Queue[T]) All() iter.Seq[T] {
 					return
 				}
 			}
+			if s == q.back {
+				return
+			}
 			start = 0
 		}
 	}
 }
 
-// Clear removes all elements from q.
-// It may take time proportional to the number of elements in q.
+// Clear removes all elements from q in constant time.
+// Clear may not release memory associated with the queue. To ensure that the
+// memory is released, drop all pointers to the queue so that it can be garbage
+// collected.
 func (q *Queue[T]) Clear() {
-	for q.front != nil {
-		s := q.front
-		q.front = s.next
-		q.putSegment(s)
-	}
-	q.back = nil
 	q.start = 0
 	q.len = 0
+	q.back = q.front
+	if q.back != nil {
+		q.resetSegment(q.back)
+	}
 }
 
 func (q *Queue[T]) getSegment() *segment[T] {
@@ -117,4 +128,9 @@ func (q *Queue[T]) getSegment() *segment[T] {
 func (q *Queue[T]) putSegment(s *segment[T]) {
 	*s = segment[T]{}
 	q.pool.Put(s)
+}
+
+func (q *Queue[T]) resetSegment(s *segment[T]) {
+	next := s.next
+	*s = segment[T]{next: next}
 }
