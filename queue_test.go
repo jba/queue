@@ -17,6 +17,7 @@ func TestQueue(t *testing.T) {
 	if got := q.Len(); got != 20 {
 		t.Fatalf("Len() after Enqueue = %d, want 20", got)
 	}
+	segmentSize := len(q.front.items)
 	if got := q.Peek(); got != 0 {
 		t.Fatalf("Peek() = %d, want 0", got)
 	}
@@ -50,11 +51,11 @@ func TestQueue(t *testing.T) {
 			break
 		}
 	}
-	if want := []int{16, 17}; !slices.Equal(firstTwo, want) {
+	if want := []int{segmentSize, segmentSize + 1}; !slices.Equal(firstTwo, want) {
 		t.Fatalf("partial All() = %v, want %v", firstTwo, want)
 	}
 
-	for i := 16; i < 20; i++ {
+	for i := segmentSize; i < 20; i++ {
 		if got := q.Dequeue(); got != i {
 			t.Fatalf("Dequeue() = %d, want %d", got, i)
 		}
@@ -64,11 +65,12 @@ func TestQueue(t *testing.T) {
 	}
 
 	// Filling the retained segment forces the next segment to come from the pool.
-	for i := range 17 {
+	reuseCount := segmentSize + 1
+	for i := range reuseCount {
 		q.Enqueue(i)
 	}
-	if got := slices.Collect(q.All()); !slices.Equal(got, want[:17]) {
-		t.Fatalf("All() after segment reuse = %v, want %v", got, want[:17])
+	if got := slices.Collect(q.All()); !slices.Equal(got, want[:reuseCount]) {
+		t.Fatalf("All() after segment reuse = %v, want %v", got, want[:reuseCount])
 	}
 }
 
@@ -91,7 +93,7 @@ func TestQueueClear(t *testing.T) {
 		t.Fatalf("All() after Clear() = %v, want empty", got)
 	}
 
-	values := make([]int, 17)
+	values := make([]int, len(q.front.items)+1)
 	for i := range values {
 		q.Enqueue(&values[i])
 	}

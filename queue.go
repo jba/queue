@@ -11,7 +11,7 @@ import (
 )
 
 type segment[T any] struct {
-	items [16]T
+	items [8]T
 	end   int
 	next  *segment[T]
 }
