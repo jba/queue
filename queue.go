@@ -10,20 +10,20 @@ import (
 	"sync"
 )
 
-type segment[T any] struct {
-	items [8]T
-	end   int
-	next  *segment[T]
-}
-
 // Queue is a first-in, first-out collection of values.
 // A Queue must not be copied after first use.
 type Queue[T any] struct {
 	front *segment[T]
 	back  *segment[T]
-	start int
+	start int // index into front of first item
 	len   int
 	pool  sync.Pool
+}
+
+type segment[T any] struct {
+	items [8]T
+	end   int
+	next  *segment[T]
 }
 
 // Len returns the number of elements in q.
