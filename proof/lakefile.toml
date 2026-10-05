@@ -1,0 +1,6 @@
+name = "queue-proof"
+version = "0.1.0"
+defaultTargets = ["QueueProof"]
+
+[[lean_lib]]
+name = "QueueProof"
